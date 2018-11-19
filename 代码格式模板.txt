@@ -1,0 +1,160 @@
+/***************************************************************
+ *                       - CC2530_Timer3.c -
+ *
+ * 本程序用于演示CC2530定时器3的相关操作，包括运行模式设置、预分 
+ * 频设置、中断程序编写。当定时器3出现中断后，将会产生中断并使LED
+ * 灯闪烁。
+ * 
+ * 注意：由于定时器3为一个8位定时器，因此溢出频率较高，当预分频值
+ *       过小会使LED灯的闪烁频率很高，几乎常亮，并非程序出现问题。
+ *
+ ****************************************************************/
+#include <ioCC2530.h>
+
+#define LED1 P1_0
+#define LED2 P1_1
+
+#define uchar unsigned char
+#define uint  unsigned int
+
+//定义定时器3运行模式宏定义
+#define T3_MODE_FREE    0
+#define T3_MODE_DOWN    1
+#define T3_MODE_MODULO  2
+#define T3_MODE_UP_DOWN 3
+
+//定义中断使能宏定义
+#define T3_INTERRUPT_ENABLE  1
+#define T3_INTERRUPT_DISABLE 0
+
+//定义定时器3时钟预分频宏定义
+#define DIV_1   1
+#define DIV_2   2
+#define DIV_4   4
+#define DIV_8   8
+#define DIV_16  16
+#define DIV_32  32
+#define DIV_64  64
+#define DIV_128 128
+
+//定义定时器溢出次数计数器全局变量
+uchar counter = 0;
+
+/*****************************************
+ * 
+ * 函数功能：定时器3分频设置
+ * 函数名  ：set_timer3_clock_prescale
+ * 入口参数：div
+ * 参数类型：uchar
+ * 参数描述：用于设置定时器3的时钟源分频值
+ *           取值范围见宏定义
+ *
+ *****************************************/
+void set_timer3_clock_prescale(uchar div)
+{
+  T3CTL &= ~0XE0;   // 清零T3CTL[7:5]位 P116
+  
+  if (div == 2)    // 不同的预分频值对应的寄存器设置
+    T3CTL|=0X20;
+  if (div == 4)
+    T3CTL|=0X40;
+  if (div == 8)
+    T3CTL|=0X60;
+  if (div == 16)
+    T3CTL|=0X80;
+  if (div == 32)
+    T3CTL|=0XA0;
+  if (div == 64)
+    T3CTL|=0XC0;
+  if (div == 128)
+    T3CTL|=0XE0;
+  else
+    T3CTL|=0X00;
+}
+
+
+/*****************************************
+ * 
+ * 定时器3运行模式选择
+ * 入口参数：running_mode
+ * 参数描述：用于设置定时器3的运行模式
+ *           取值范围见宏定义
+ *
+ *****************************************/
+void set_timer3_mode(uchar running_mode)
+{ 
+   T3CTL &= 0xFC;    // 清零T3CTL[0:1]位  P116
+   if(mode == T3_MODE_FREE)
+   { T3CTL|=0X00;}
+   if(mode == T3_MODE_DOWN)
+   { T3CTL|=0X01;}
+   if(mode == T3_MODE_MODULO)
+   { T3CTL|=0X02;}
+   if(mode == T3_MODE_UP_DOWN)
+   { T3CTL|=0X03;}
+}
+
+
+/*****************************************
+ * 
+ * 定时器3初始化
+ * 入口参数：running_mode, prescale,
+ *           interrupt_enable, reload
+ * 参数描述：running_mode - 定时器3运行模式
+ *           prescale     - 时钟预分频值
+ *           interrupt_enable - 是否启用中断
+ *           reload - 自动重装值，自由运行模式除外
+ *
+ *****************************************/
+void timer3_init(uchar running_mode,uchar prescale,
+                 uchar interrupt_enable)
+{
+   
+    if(interrupt_enable == 1)
+    {
+      EA    = 1;       //开总中断                                                            
+      T3IE  = 1;       // 运行T3向CPU发出中断请求 P30 IEN1.T3IE
+      T3CTL |= 0x08;   // 使能T3中断系统
+    }
+    if(interrupt_enable == 0)
+    {
+      EA = 0; //关闭总中断
+    }
+    
+    //设置定时器3预分频值
+    set_timer3_clock_prescale(prescale);
+    set_timer3_mode(running_mode);
+    
+    T3CTL |= 0x10;  //启动定时器3   
+}
+
+
+//初始化LED外设
+void LED_init(void)
+{
+    P1DIR = 0X03;
+    LED1 = 1;
+    LED2 = 1;
+}
+
+
+//主函数
+void main(void)
+{
+  LED_init();            
+  timer3_init(T3_MODE_FREE,DIV_1,T3_INTERRUPT_ENABLE);
+  while(1);         //等待中断
+}
+
+//中断服务程序
+#pragma vector = T3_VECTOR
+__interrupt void T3_ISR(void)
+{
+    if(counter<200)
+      counter++;	//200次中断LED闪烁一轮
+    else
+    {
+      counter = 0;  //计数清零
+      LED1 = !LED1; //改变小灯的状态
+    }
+}
